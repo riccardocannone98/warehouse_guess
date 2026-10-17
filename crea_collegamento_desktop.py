@@ -17,6 +17,20 @@ ICON_ICO = ROOT / "app" / "static" / "icon.ico"
 ICON_PNG = ROOT / "app" / "static" / "icon.png"
 
 
+def unblock_project() -> None:
+    """Toglie ai file del progetto il contrassegno "scaricato da internet",
+    che fa bloccare l'avvio a Windows SmartScreen e a macOS Gatekeeper."""
+    system = platform.system()
+    if system == "Windows":
+        subprocess.run(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+             "Get-ChildItem -LiteralPath $env:WG_ROOT -Recurse -File | Unblock-File"],
+            env={**os.environ, "WG_ROOT": str(ROOT)}, capture_output=True,
+        )
+    elif system == "Darwin":
+        subprocess.run(["xattr", "-dr", "com.apple.quarantine", str(ROOT)], capture_output=True)
+
+
 def windows_shortcut() -> Path:
     # Il percorso del desktop si chiede a Windows: con OneDrive non è ~/Desktop.
     script = r"""
@@ -96,6 +110,7 @@ def linux_shortcut() -> Path:
 if __name__ == "__main__":
     system = platform.system()
     try:
+        unblock_project()
         if system == "Windows":
             created = windows_shortcut()
         elif system == "Darwin":

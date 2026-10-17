@@ -29,6 +29,13 @@ Al primo avvio vengono preparati l'ambiente Python (`.venv`) e le librerie, quin
 | macOS | `avvia.command` | la prima volta macOS può bloccarlo: tasto destro sull'icona → **Apri** → **Apri** |
 | Linux | `avvia.command` | file `.desktop`; se richiesto, tasto destro → "Consenti avvio" |
 
+**"App bloccata perché potrebbe essere pericolosa"**: Windows e macOS segnalano così i file scaricati da internet (per esempio lo zip da GitHub), non un problema dell'app. `crea_collegamento_desktop.py` toglie questo contrassegno dai file del progetto; se il blocco compare prima di averlo eseguito:
+
+- **Windows** (SmartScreen, "Windows ha protetto il PC"): clic su **Ulteriori informazioni** → **Esegui comunque**. In alternativa, prima di estrarre lo zip: tasto destro sullo zip → **Proprietà** → spunta **Sblocca** → OK.
+- **macOS** ("impossibile verificare che non contenga malware"): tasto destro sul file → **Apri** → **Apri**. Se non basta: **Impostazioni di Sistema → Privacy e sicurezza** → in fondo **Apri comunque**. Da Terminale: `xattr -dr com.apple.quarantine <cartella del progetto>`.
+
+Scaricando il progetto con `git clone` invece che come zip il contrassegno non viene applicato.
+
 Puoi anche avviare direttamente `avvia.bat` (Windows) o `avvia.command` (macOS/Linux) dalla cartella del progetto.
 
 ### Da terminale
