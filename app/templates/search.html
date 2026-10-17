@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+  <h1>Cerca disponibilità</h1>
+  <p class="muted">Inserisci uno o più style code (uno per riga), es. <code>DD1391-100</code>, <code>IE3438</code>, <code>U9060AAA</code>.</p>
+  {% if error %}<p class="alert">{{ error }}</p>{% endif %}
+  {% if not sites %}
+    <p class="alert">Nessun sito attivo. <a href="/sites">Aggiungi i siti dei rivenditori</a> prima di cercare.</p>
+  {% else %}
+  <form method="post" action="/search" id="search-form">
+    <textarea name="codes" rows="4" placeholder="DD1391-100&#10;FZ5808-100" required>{{ codes or '' }}</textarea>
+    <details>
+      <summary>Siti in cui cercare ({{ sites|length }} attivi — di default tutti)</summary>
+      <div class="checks">
+        {% for s in sites %}
+        <label><input type="checkbox" name="site_ids" value="{{ s.id }}"> {{ s.name }} <span class="tag">{{ s.platform }}</span></label>
+        {% endfor %}
+      </div>
+    </details>
+    <button type="submit">Cerca</button>
+    <span class="spinner" hidden>Ricerca in corso… può richiedere qualche secondo per sito.</span>
+  </form>
+  <script>
+    document.getElementById('search-form').addEventListener('submit', function () {
+      this.querySelector('button').disabled = true;
+      this.querySelector('.spinner').hidden = false;
+    });
+  </script>
+  {% endif %}
+</section>
+
+{% if recent %}
+<section class="card">
+  <h2>Ricerche recenti</h2>
+  <table>
+    <thead><tr><th>Data</th><th>Codici</th><th class="num">Pezzi trovati [pz]</th><th></th></tr></thead>
+    <tbody>
+    {% for r in recent %}
+      <tr>
+        <td>{{ r.created_at.replace('T', ' ') }}</td>
+        <td>{{ r.codes.replace('\n', ', ') }}</td>
+        <td class="num">{{ r.pieces }}</td>
+        <td><a href="/results/{{ r.id }}">Apri</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+{% endblock %}

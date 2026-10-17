@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card narrow">
+  <h1>{{ 'Modifica ' + site.name if site.id else 'Nuovo sito' }}</h1>
+  <form method="post" action="{{ '/sites/' ~ site.id if site.id else '/sites' }}" class="stack">
+    <label>URL del sito
+      <input name="base_url" value="{{ site.base_url }}" placeholder="https://www.negozio.it" required>
+      <small>Indirizzo principale del negozio (anche con sottocartella lingua, es. <code>https://negozio.com/it</code>).</small>
+    </label>
+    <label>Nome
+      <input name="name" value="{{ site.name }}" placeholder="vuoto = nome dal dominio">
+    </label>
+    <label>Piattaforma
+      <select name="platform">
+        {% for p in platforms %}<option value="{{ p }}" {{ 'selected' if p == site.platform }}>{{ PLATFORM_LABELS[p] }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="inline"><input type="checkbox" name="active" {{ 'checked' if site.active }}> Attivo nelle ricerche</label>
+    <label class="inline"><input type="checkbox" name="cart_probe" {{ 'checked' if site.cart_probe }}> Probe carrello (solo Shopify)</label>
+    <small>Se il negozio non espone le quantità, le ricava dal limite del carrello con una sessione anonima che viene svuotata subito dopo. Più lento: una richiesta in più per taglia.</small>
+    <label>Note
+      <textarea name="notes" rows="2">{{ site.notes }}</textarea>
+    </label>
+
+    <details {{ 'open' if site.config }}>
+      <summary>Configurazione avanzata (siti generici)</summary>
+      <label>URL di ricerca
+        <input name="search_url" value="{{ site.config.get('search_url', '') }}" placeholder="https://negozio.it/search?q={code}">
+        <small><code>{code}</code> viene sostituito dal codice cercato.</small>
+      </label>
+      <label>Selettore CSS link prodotto
+        <input name="product_link_selector" value="{{ site.config.get('product_link_selector', '') }}" placeholder="a.product-card__link">
+      </label>
+      <label>Selettore CSS taglie
+        <input name="variant_selector" value="{{ site.config.get('variant_selector', '') }}" placeholder="ul.sizes li">
+        <small>Un elemento per taglia sulla pagina prodotto.</small>
+      </label>
+      <label>Attributo taglia
+        <input name="size_attr" value="{{ site.config.get('size_attr', '') }}" placeholder="data-size (vuoto = testo dell'elemento)">
+      </label>
+      <label>Attributo quantità
+        <input name="qty_attr" value="{{ site.config.get('qty_attr', '') }}" placeholder="data-stock">
+      </label>
+      <label>Regex quantità
+        <input name="qty_regex" value="{{ site.config.get('qty_regex', '') }}" placeholder="stock[^0-9]*(\d+)">
+        <small>Applicata all'HTML dell'elemento taglia; il primo gruppo è la quantità.</small>
+      </label>
+      <label>Valuta
+        <input name="currency" value="{{ site.config.get('currency', '') }}" placeholder="EUR">
+      </label>
+      <label>Pagine di catalogo da scorrere (Shopify)
+        <input name="max_pages" type="number" min="1" max="40" value="{{ site.config.get('max_pages', '') }}" placeholder="3 (250 prodotti per pagina)">
+      </label>
+    </details>
+
+    <div class="actions">
+      <button type="submit">Salva</button>
+      <a href="/sites">Annulla</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

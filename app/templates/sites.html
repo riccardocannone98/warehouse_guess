@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+  <div class="row">
+    <h1>Siti monitorati</h1>
+    <div class="actions">
+      <a class="button" href="/sites/new">+ Nuovo sito</a>
+      <a class="button secondary" href="/sites/export.csv">Esporta CSV</a>
+    </div>
+  </div>
+  {% if msg %}<p class="notice">{{ msg }}</p>{% endif %}
+  {% if sites %}
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Nome</th><th>URL</th><th>Piattaforma</th><th>Probe carrello</th><th>Ultimo controllo</th><th>Stato</th><th></th></tr></thead>
+    <tbody>
+    {% for s in sites %}
+      <tr class="{{ '' if s.active else 'inactive' }}">
+        <td><b>{{ s.name }}</b>{% if s.notes %}<br><span class="muted">{{ s.notes }}</span>{% endif %}</td>
+        <td><a href="{{ s.base_url }}" target="_blank" rel="noopener">{{ s.base_url }}</a></td>
+        <td>{{ PLATFORM_LABELS[s.platform] }}</td>
+        <td>{{ 'sì' if s.cart_probe else 'no' }}</td>
+        <td>{{ (s.last_checked or '—').replace('T', ' ') }}</td>
+        <td>{% if s.last_status %}<span class="status {{ 'ok' if s.last_status == 'ok' else 'errore' }}" title="{{ s.last_status }}">{{ 'ok' if s.last_status == 'ok' else 'errore' }}</span>{% endif %}</td>
+        <td class="actions">
+          <a href="/sites/{{ s.id }}/edit">Modifica</a>
+          <form method="post" action="/sites/{{ s.id }}/detect"><button class="link" type="submit">Rileva piattaforma</button></form>
+          <form method="post" action="/sites/{{ s.id }}/toggle"><button class="link" type="submit">{{ 'Disattiva' if s.active else 'Attiva' }}</button></form>
+          <form method="post" action="/sites/{{ s.id }}/delete" onsubmit="return confirm('Eliminare {{ s.name }}?')"><button class="link danger" type="submit">Elimina</button></form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">Nessun sito in elenco. Aggiungine uno o importa una lista qui sotto.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Importazione rapida</h2>
+  <p class="muted">Un sito per riga: solo l'URL, oppure <code>Nome;URL</code>. La piattaforma viene rilevata alla prima ricerca.</p>
+  <form method="post" action="/sites/import">
+    <textarea name="text" rows="5" placeholder="https://www.esempio-sneakers.it&#10;Boutique Milano;https://boutique-milano.com"></textarea>
+    <button type="submit">Importa</button>
+  </form>
+</section>
+{% endblock %}

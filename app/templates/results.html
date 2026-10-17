@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Risultati — {{ codes|join(', ') }}{% endblock %}
+{% block content %}
+<section class="card">
+  <div class="row">
+    <h1>Risultati: {{ codes|join(', ') }}</h1>
+    <div class="actions">
+      <a class="button" href="/results/{{ search.id }}/export.xlsx">Esporta Excel</a>
+      <form method="post" action="/search">
+        <input type="hidden" name="codes" value="{{ codes|join('\n') }}">
+        <button type="submit" class="secondary">Ripeti ricerca</button>
+      </form>
+    </div>
+  </div>
+  <p class="muted">Ricerca del {{ search.created_at.replace('T', ' ') }}.
+    Legenda celle: <b>numero</b> = pezzi a magazzino · <span class="cell yes">✓</span> disponibile, quantità non esposta dal sito ·
+    <span class="cell zero">0</span> esaurito · <span class="cell unk">?</span> non noto.</p>
+</section>
+
+{% for block in blocks %}
+<section class="card">
+  <h2>{{ block.code }}</h2>
+  <div class="scroll">
+  <table class="matrix">
+    <thead>
+      <tr>
+        <th>Sito / prodotto</th>
+        <th class="num">Prezzo</th>
+        {% for size in block.sizes %}<th class="num">{{ size }}</th>{% endfor %}
+        <th class="num">Totale [pz]</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for p in block.products %}
+      <tr>
+        <td class="product">
+          {% if p.image %}<img src="{{ p.image }}" alt="" loading="lazy">{% endif %}
+          <div><b>{{ p.site_name }}</b><br><a href="{{ p.url }}" target="_blank" rel="noopener">{{ p.title }}</a></div>
+        </td>
+        <td class="num">{% if p.price is not none %}{{ '%.2f'|format(p.price) }} {{ p.currency }}{% endif %}</td>
+        {% for size in block.sizes %}
+          {% set c = p.cells.get(size) %}
+          {% if not c %}<td class="cell none"></td>
+          {% elif c.qty is not none %}<td class="cell {{ 'zero' if c.qty == 0 else 'qty' }}" title="{{ c.method }}">{{ c.qty }}</td>
+          {% elif c.available %}<td class="cell yes" title="{{ c.method }}">✓</td>
+          {% else %}<td class="cell unk" title="{{ c.method }}">?</td>{% endif %}
+        {% endfor %}
+        <td class="num total">{{ p.total }}{% if p.unknown %}<span class="muted" title="{{ p.unknown }} taglie disponibili senza quantità esposta"> +?</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr>
+        <th colspan="2">Totale per taglia [pz]</th>
+        {% for size in block.sizes %}<th class="num">{{ block.size_totals[size] }}</th>{% endfor %}
+        <th class="num">{{ block.size_totals.values()|sum }}</th>
+      </tr>
+    </tfoot>
+  </table>
+  </div>
+</section>
+{% else %}
+<section class="card"><p>Nessun prodotto trovato sui siti interrogati. Controlla il log qui sotto.</p></section>
+{% endfor %}
+
+<section class="card">
+  <h2>Log per sito</h2>
+  <table>
+    <thead><tr><th>Codice</th><th>Sito</th><th>Esito</th><th>Dettaglio</th></tr></thead>
+    <tbody>
+    {% for e in log %}
+      <tr><td>{{ e.code }}</td><td>{{ e.site_name }}</td><td><span class="status {{ e.status }}">{{ e.status }}</span></td><td>{{ e.message }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <form method="post" action="/results/{{ search.id }}/delete" onsubmit="return confirm('Eliminare questa ricerca dallo storico?')">
+    <button class="danger small" type="submit">Elimina dallo storico</button>
+  </form>
+</section>
+{% endblock %}
