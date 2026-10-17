@@ -4,7 +4,7 @@
 <div class="page-head">
   <div>
     <h1>Risultati</h1>
-    <p>Ricerca del {{ search.created_at.replace('T', ' ') }} · {{ codes|join(' · ') }}</p>
+    <p>Ricerca del {{ search.created_at[:16].replace('T', ' ') }}</p>
   </div>
   <div class="actions">
     <form method="post" action="/search" data-searching>
@@ -14,80 +14,146 @@
     <a class="btn" href="/results/{{ search.id }}/export.xlsx">Esporta Excel</a>
   </div>
 </div>
-<div class="searching" id="searching" hidden style="margin:-8px 0 16px"><div class="spinner"></div>Ricerca in corso…</div>
-<div class="legend" style="margin-bottom:16px">
-  <span><span class="cell qty">3</span>pezzi a magazzino</span>
-  <span><span class="cell yes">✓</span>disponibile, quantità non esposta</span>
-  <span><span class="cell zero">0</span>esaurito</span>
-  <span><span class="cell unk">?</span>non noto</span>
+<div class="searching" id="searching" hidden style="margin:-0.5rem 0 1rem"><div class="spinner"></div>Ricerca in corso…</div>
+
+<div class="grid kpis">
+  <div class="card kpi">
+    <div class="label">Codici trovati</div>
+    <div class="value">{{ blocks|length }}<span class="unit">/ {{ codes|length }}</span></div>
+    <div class="sub">codici cercati in questa ricerca</div>
+  </div>
+  <div class="card kpi">
+    <div class="label">Pezzi a magazzino</div>
+    <div class="value">{{ pieces }}<span class="unit">pz</span></div>
+    <div class="sub">solo dove il sito espone la quantità</div>
+  </div>
+  <div class="card kpi">
+    <div class="label">Siti interrogati</div>
+    <div class="value">{{ sites_count }}</div>
+    <div class="sub">{{ log_hits|selectattr('status', 'equalto', 'errore')|list|length }} risposte con errore</div>
+  </div>
+  <div class="card kpi">
+    <div class="label">Legenda celle</div>
+    <div class="legend legend-stack">
+      <span><span class="cell qty">3</span>pezzi a magazzino</span>
+      <span><span class="cell yes">✓</span>disponibile, quantità non esposta</span>
+      <span><span class="cell zero">0</span>esaurito</span>
+    </div>
+  </div>
 </div>
 
 {% for block in blocks %}
-<section class="card">
+<section class="card result-block">
   {% set item = catalog.get(normalize(block.code)) %}
   <div class="card-head">
     <div>
-      <h2 class="mono">{{ block.code }}</h2>
-      {% if item %}<span class="small">{{ item.brand }} {{ item.model }}{% if item.colorway %} · {{ item.colorway }}{% endif %}</span>{% endif %}
+      <h2 class="code-title">{{ block.code }}</h2>
+      {% if item %}<span class="sub-title">{{ item.brand }} {{ item.model }}{% if item.colorway %} · {{ item.colorway }}{% endif %}</span>{% endif %}
     </div>
-    <span class="badge">{{ block.size_totals.values()|sum }} pz totali</span>
+    <div class="actions">
+      {% if block.pieces %}<span class="badge ok">{{ block.pieces }} pz a magazzino</span>{% endif %}
+      {% if block.only_availability %}<span class="badge warn" data-tip="Il sito mostra solo se una taglia è disponibile, non quanti pezzi. Per i negozi Shopify puoi attivare il probe carrello dalla scheda del sito.">Solo disponibilità, quantità non esposte</span>{% endif %}
+    </div>
   </div>
   <div class="table-wrap">
   <table class="matrix">
     <thead>
       <tr>
-        <th>Sito / prodotto</th>
+        <th class="sticky-col">Sito / prodotto</th>
         <th class="num">Prezzo</th>
-        {% for size in block.sizes %}<th class="num">{{ size }}</th>{% endfor %}
+        {% for size in block.sizes %}<th class="num size-h">{{ size }}</th>{% endfor %}
+        <th class="num">Taglie disp.</th>
         <th class="num">Totale [pz]</th>
       </tr>
     </thead>
     <tbody>
     {% for p in block.products %}
       <tr>
-        <td class="product">
+        <td class="product sticky-col">
           {% if p.image %}<img src="{{ p.image }}" alt="" loading="lazy">{% else %}<div class="thumb"></div>{% endif %}
-          <div><b>{{ p.site_name }}</b><br><a href="{{ p.url }}" target="_blank" rel="noopener">{{ p.title }}</a></div>
+          <div><b>{{ p.site_name }}</b><a href="{{ p.url }}" target="_blank" rel="noopener">{{ p.title }}</a></div>
         </td>
-        <td class="num">{% if p.price is not none %}{{ '%.2f'|format(p.price) }} {{ p.currency }}{% endif %}</td>
+        <td class="num price">{% if p.price is not none %}{{ '%.2f'|format(p.price) }}<span class="small"> {{ p.currency }}</span>{% endif %}</td>
         {% for size in block.sizes %}
           {% set c = p.cells.get(size) %}
-          {% if not c %}<td class="cell unk"></td>
-          {% elif c.qty is not none %}<td class="cell {{ 'zero' if c.qty == 0 else 'qty' }}" data-tip="Taglia {{ size }} · {{ c.method }}">{{ c.qty }}</td>
-          {% elif c.available %}<td class="cell yes" data-tip="Taglia {{ size }} · {{ c.method }}">✓</td>
+          {% if not c %}<td class="cell none"></td>
+          {% elif c.qty is not none %}<td class="cell {{ 'zero' if c.qty == 0 else 'qty' }}" data-tip="Taglia {{ size }}: {{ c.qty }} pz · {{ c.method }}">{{ c.qty }}</td>
+          {% elif c.available %}<td class="cell yes" data-tip="Taglia {{ size }}: disponibile · {{ c.method }}">✓</td>
           {% else %}<td class="cell unk" data-tip="Taglia {{ size }} · {{ c.method }}">?</td>{% endif %}
         {% endfor %}
-        <td class="num total">{{ p.total }}{% if p.unknown %}<span class="muted" data-tip="{{ p.unknown }} taglie disponibili senza quantità esposta"> +?</span>{% endif %}</td>
+        <td class="num">{{ p.sizes_in_stock }}<span class="small"> / {{ p.cells|length }}</span></td>
+        <td class="num total">{% if p.total or not p.unknown %}{{ p.total }}{% endif %}{% if p.unknown %}<span class="muted" data-tip="{{ p.unknown }} taglie disponibili senza quantità esposta">{{ ' +' if p.total }}✓</span>{% endif %}</td>
       </tr>
     {% endfor %}
     </tbody>
+    {% if block.products|length > 1 or block.pieces %}
     <tfoot>
       <tr>
-        <th colspan="2">Totale per taglia [pz]</th>
-        {% for size in block.sizes %}<th class="num">{{ block.size_totals[size] }}</th>{% endfor %}
-        <th class="num">{{ block.size_totals.values()|sum }}</th>
+        <th class="sticky-col" colspan="2">Totale per taglia [pz]</th>
+        {% for size in block.sizes %}
+          <th class="num">{% if block.size_totals[size] %}{{ block.size_totals[size] }}{% elif block.size_flags[size] %}<span class="muted">✓</span>{% else %}0{% endif %}</th>
+        {% endfor %}
+        <th></th>
+        <th class="num">{{ block.pieces }}</th>
       </tr>
     </tfoot>
+    {% endif %}
   </table>
   </div>
 </section>
-{% else %}
-<section class="card empty"><p>Nessun prodotto trovato sui siti interrogati. Controlla il log qui sotto.</p></section>
 {% endfor %}
 
+{% if missing %}
 <section class="card">
-  <div class="card-head"><h2>Log per sito</h2></div>
+  <div class="card-head">
+    <div>
+      <h2>Codici non trovati ({{ missing|length }})</h2>
+      <span class="small">Nessuno dei siti interrogati ha restituito questi prodotti.</span>
+    </div>
+  </div>
+  <div class="pills">
+    {% for code in missing %}
+      {% set item = catalog.get(normalize(code)) %}
+      <span class="pill static" {% if item %}data-tip="{{ item.brand }} {{ item.model }}{% if item.colorway %} · {{ item.colorway }}{% endif %}"{% endif %}><span class="mono">{{ code }}</span></span>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section class="card">
+  <div class="card-head">
+    <div>
+      <h2>Log per sito</h2>
+      <span class="small">Prodotti trovati ed errori · {{ log_empty|length }} ricerche senza risultati raggruppate in fondo</span>
+    </div>
+  </div>
   <div class="table-wrap">
   <table>
     <thead><tr><th>Codice</th><th>Sito</th><th>Esito</th><th>Dettaglio</th></tr></thead>
     <tbody>
-    {% for e in log %}
-      <tr><td>{{ e.code }}</td><td>{{ e.site_name }}</td><td><span class="badge {{ e.status }}">{{ {'ok': '● trovato', 'vuoto': '○ nessun risultato', 'errore': '▲ errore'}[e.status] }}</span></td><td>{{ e.message }}</td></tr>
+    {% for e in log_hits %}
+      <tr><td class="mono">{{ e.code }}</td><td>{{ e.site_name }}</td><td><span class="badge {{ e.status }}">{{ {'ok': '● trovato', 'errore': '▲ errore'}[e.status] }}</span></td><td>{{ e.message }}</td></tr>
+    {% else %}
+      <tr><td colspan="4" class="muted">Nessun prodotto trovato e nessun errore.</td></tr>
     {% endfor %}
     </tbody>
   </table>
   </div>
-  <form method="post" action="/results/{{ search.id }}/delete" style="margin-top:14px" onsubmit="return confirm('Eliminare questa ricerca dallo storico?')">
+  {% if log_empty %}
+  <details style="margin-top:0.8rem">
+    <summary>Senza risultati ({{ log_empty|length }})</summary>
+    <div class="table-wrap">
+    <table>
+      <tbody>
+      {% for e in log_empty %}
+        <tr><td class="mono">{{ e.code }}</td><td>{{ e.site_name }}</td><td><span class="badge vuoto">○ nessun risultato</span></td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </details>
+  {% endif %}
+  <form method="post" action="/results/{{ search.id }}/delete" style="margin-top:1rem" onsubmit="return confirm('Eliminare questa ricerca dallo storico?')">
     <button class="ghost sm" type="submit">Elimina dallo storico</button>
   </form>
 </section>

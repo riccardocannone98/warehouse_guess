@@ -29,6 +29,7 @@ def build_matrix(rows) -> list[dict]:
                 "cells": {},
                 "total": 0,
                 "unknown": 0,
+                "sizes_in_stock": 0,
             },
         )
         if r["price"] is not None and (product["price"] is None or r["price"] < product["price"]):
@@ -41,13 +42,30 @@ def build_matrix(rows) -> list[dict]:
             cell["available"] = bool(r["available"]) or bool(cell["available"])
         if r["quantity"] is None and r["available"] != 0:
             product["unknown"] += 1
+        if (r["quantity"] or 0) > 0 or (r["quantity"] is None and r["available"]):
+            product["sizes_in_stock"] += 1
 
     blocks = []
     for block in by_code.values():
         sizes = sorted(block["sizes"], key=size_key)
         products = sorted(block["products"].values(), key=lambda p: (-p["total"], p["site_name"]))
         size_totals = {s: sum((p["cells"].get(s) or {}).get("qty") or 0 for p in products) for s in sizes}
-        blocks.append({"code": block["code"], "sizes": sizes, "products": products, "size_totals": size_totals})
+        # Taglie disponibili senza quantità esposta: nel totale si mostra ✓ invece di un fuorviante 0.
+        size_flags = {
+            s: any((p["cells"].get(s) or {}).get("qty") is None and (p["cells"].get(s) or {}).get("available") for p in products)
+            for s in sizes
+        }
+        blocks.append(
+            {
+                "code": block["code"],
+                "sizes": sizes,
+                "products": products,
+                "size_totals": size_totals,
+                "size_flags": size_flags,
+                "pieces": sum(size_totals.values()),
+                "only_availability": not any(size_totals.values()) and any(size_flags.values()),
+            }
+        )
     return blocks
 
 

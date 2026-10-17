@@ -35,7 +35,7 @@
 </div>
 
 {% if not codes %}
-<div class="card empty" style="margin-top:18px">
+<div class="card empty">
   <h2>Ancora nessuna rilevazione</h2>
   <p>Aggiungi i siti dei rivenditori, poi cerca uno o più codici: qui vedrai pezzi disponibili, taglie, prezzi e l'andamento nel tempo.</p>
   <div class="steps">
@@ -44,7 +44,7 @@
   </div>
 </div>
 {% else %}
-<div class="card" style="margin-top:18px">
+<div class="card">
   <div class="card-head">
     <div>
       <h2>Disponibilità per codice</h2>
@@ -165,7 +165,7 @@
 {% endif %}
 
 {% if recent %}
-<div class="card" style="margin-top:18px">
+<div class="card">
   <div class="card-head"><h2>Ricerche recenti</h2></div>
   <ul class="recent">
     {% for r in recent %}

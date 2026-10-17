@@ -92,6 +92,22 @@ def create_app(db_path: str | Path | None = None, client_factory: ClientFactory 
             db.set_site_status(site.id, site.platform, errors[0] if errors else "ok")
         return redirect(f"/results/{db.save_search(codes, outcomes)}")
 
+    def results_context(search_row, log, rows) -> dict:
+        blocks = build_matrix(rows)
+        codes = search_row["codes"].split("\n")
+        found = {normalize(b["code"]) for b in blocks}
+        return {
+            "search": search_row,
+            "codes": codes,
+            "blocks": blocks,
+            "catalog": db.catalog_by_code(),
+            "missing": [c for c in codes if normalize(c) not in found],
+            "pieces": sum(b["pieces"] for b in blocks),
+            "sites_count": len({e["site_name"] for e in log}),
+            "log_hits": [e for e in log if e["status"] != "vuoto"],
+            "log_empty": [e for e in log if e["status"] == "vuoto"],
+        }
+
     @app.get("/results/{search_id}", response_class=HTMLResponse)
     def results(request: Request, search_id: int):
         search_row, log, rows = db.get_search(search_id)
@@ -100,13 +116,7 @@ def create_app(db_path: str | Path | None = None, client_factory: ClientFactory 
         return templates.TemplateResponse(
             request,
             "results.html",
-            {
-                "search": search_row,
-                "log": log,
-                "blocks": build_matrix(rows),
-                "codes": search_row["codes"].split("\n"),
-                "catalog": db.catalog_by_code(),
-            },
+            results_context(search_row, log, rows),
         )
 
     @app.get("/results/{search_id}/export.xlsx")
