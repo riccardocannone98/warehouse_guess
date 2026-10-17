@@ -1,26 +1,38 @@
 {% extends "base.html" %}
-{% block title %}Risultati — {{ codes|join(', ') }}{% endblock %}
+{% block title %}Risultati {{ codes|join(', ') }}{% endblock %}
 {% block content %}
-<section class="card">
-  <div class="row">
-    <h1>Risultati: {{ codes|join(', ') }}</h1>
-    <div class="actions">
-      <a class="button" href="/results/{{ search.id }}/export.xlsx">Esporta Excel</a>
-      <form method="post" action="/search">
-        <input type="hidden" name="codes" value="{{ codes|join('\n') }}">
-        <button type="submit" class="secondary">Ripeti ricerca</button>
-      </form>
-    </div>
+<div class="page-head">
+  <div>
+    <h1>Risultati</h1>
+    <p>Ricerca del {{ search.created_at.replace('T', ' ') }} · {{ codes|join(' · ') }}</p>
   </div>
-  <p class="muted">Ricerca del {{ search.created_at.replace('T', ' ') }}.
-    Legenda celle: <b>numero</b> = pezzi a magazzino · <span class="cell yes">✓</span> disponibile, quantità non esposta dal sito ·
-    <span class="cell zero">0</span> esaurito · <span class="cell unk">?</span> non noto.</p>
-</section>
+  <div class="actions">
+    <form method="post" action="/search" data-searching>
+      <input type="hidden" name="codes" value="{{ codes|join('\n') }}">
+      <button type="submit" class="ghost">Ripeti ricerca</button>
+    </form>
+    <a class="btn" href="/results/{{ search.id }}/export.xlsx">Esporta Excel</a>
+  </div>
+</div>
+<div class="searching" id="searching" hidden style="margin:-8px 0 16px"><div class="spinner"></div>Ricerca in corso…</div>
+<div class="legend" style="margin-bottom:16px">
+  <span><span class="cell qty">3</span>pezzi a magazzino</span>
+  <span><span class="cell yes">✓</span>disponibile, quantità non esposta</span>
+  <span><span class="cell zero">0</span>esaurito</span>
+  <span><span class="cell unk">?</span>non noto</span>
+</div>
 
 {% for block in blocks %}
 <section class="card">
-  <h2>{{ block.code }}</h2>
-  <div class="scroll">
+  {% set item = catalog.get(normalize(block.code)) %}
+  <div class="card-head">
+    <div>
+      <h2 class="mono">{{ block.code }}</h2>
+      {% if item %}<span class="small">{{ item.brand }} {{ item.model }}{% if item.colorway %} · {{ item.colorway }}{% endif %}</span>{% endif %}
+    </div>
+    <span class="badge">{{ block.size_totals.values()|sum }} pz totali</span>
+  </div>
+  <div class="table-wrap">
   <table class="matrix">
     <thead>
       <tr>
@@ -34,18 +46,18 @@
     {% for p in block.products %}
       <tr>
         <td class="product">
-          {% if p.image %}<img src="{{ p.image }}" alt="" loading="lazy">{% endif %}
+          {% if p.image %}<img src="{{ p.image }}" alt="" loading="lazy">{% else %}<div class="thumb"></div>{% endif %}
           <div><b>{{ p.site_name }}</b><br><a href="{{ p.url }}" target="_blank" rel="noopener">{{ p.title }}</a></div>
         </td>
         <td class="num">{% if p.price is not none %}{{ '%.2f'|format(p.price) }} {{ p.currency }}{% endif %}</td>
         {% for size in block.sizes %}
           {% set c = p.cells.get(size) %}
-          {% if not c %}<td class="cell none"></td>
-          {% elif c.qty is not none %}<td class="cell {{ 'zero' if c.qty == 0 else 'qty' }}" title="{{ c.method }}">{{ c.qty }}</td>
-          {% elif c.available %}<td class="cell yes" title="{{ c.method }}">✓</td>
-          {% else %}<td class="cell unk" title="{{ c.method }}">?</td>{% endif %}
+          {% if not c %}<td class="cell unk"></td>
+          {% elif c.qty is not none %}<td class="cell {{ 'zero' if c.qty == 0 else 'qty' }}" data-tip="Taglia {{ size }} · {{ c.method }}">{{ c.qty }}</td>
+          {% elif c.available %}<td class="cell yes" data-tip="Taglia {{ size }} · {{ c.method }}">✓</td>
+          {% else %}<td class="cell unk" data-tip="Taglia {{ size }} · {{ c.method }}">?</td>{% endif %}
         {% endfor %}
-        <td class="num total">{{ p.total }}{% if p.unknown %}<span class="muted" title="{{ p.unknown }} taglie disponibili senza quantità esposta"> +?</span>{% endif %}</td>
+        <td class="num total">{{ p.total }}{% if p.unknown %}<span class="muted" data-tip="{{ p.unknown }} taglie disponibili senza quantità esposta"> +?</span>{% endif %}</td>
       </tr>
     {% endfor %}
     </tbody>
@@ -60,21 +72,23 @@
   </div>
 </section>
 {% else %}
-<section class="card"><p>Nessun prodotto trovato sui siti interrogati. Controlla il log qui sotto.</p></section>
+<section class="card empty"><p>Nessun prodotto trovato sui siti interrogati. Controlla il log qui sotto.</p></section>
 {% endfor %}
 
 <section class="card">
-  <h2>Log per sito</h2>
+  <div class="card-head"><h2>Log per sito</h2></div>
+  <div class="table-wrap">
   <table>
     <thead><tr><th>Codice</th><th>Sito</th><th>Esito</th><th>Dettaglio</th></tr></thead>
     <tbody>
     {% for e in log %}
-      <tr><td>{{ e.code }}</td><td>{{ e.site_name }}</td><td><span class="status {{ e.status }}">{{ e.status }}</span></td><td>{{ e.message }}</td></tr>
+      <tr><td>{{ e.code }}</td><td>{{ e.site_name }}</td><td><span class="badge {{ e.status }}">{{ {'ok': '● trovato', 'vuoto': '○ nessun risultato', 'errore': '▲ errore'}[e.status] }}</span></td><td>{{ e.message }}</td></tr>
     {% endfor %}
     </tbody>
   </table>
-  <form method="post" action="/results/{{ search.id }}/delete" onsubmit="return confirm('Eliminare questa ricerca dallo storico?')">
-    <button class="danger small" type="submit">Elimina dallo storico</button>
+  </div>
+  <form method="post" action="/results/{{ search.id }}/delete" style="margin-top:14px" onsubmit="return confirm('Eliminare questa ricerca dallo storico?')">
+    <button class="ghost sm" type="submit">Elimina dallo storico</button>
   </form>
 </section>
 {% endblock %}

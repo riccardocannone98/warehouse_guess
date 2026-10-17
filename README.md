@@ -51,9 +51,16 @@ I dati (siti e storico ricerche) stanno in `data/warehouse.db`, un file SQLite l
 
 ## Come si usa
 
-1. **Siti**: aggiungi i rivenditori uno alla volta (`+ Nuovo sito`) o incolla una lista in *Importazione rapida* (`URL` oppure `Nome;URL`, uno per riga). La lista si esporta in CSV.
-2. **Ricerca**: incolla uno o più style code e premi *Cerca*. Di default interroga tutti i siti attivi; dal riquadro "Siti in cui cercare" puoi limitarla ad alcuni.
-3. **Risultati**: per ogni codice c'è una matrice sito × taglia con i pezzi disponibili, il totale per riga e per taglia, il log per sito (trovato / nessun risultato / errore) e l'export Excel.
+L'app ha quattro sezioni nella barra laterale.
+
+1. **Dashboard**: la situazione dell'ultima rilevazione di ogni codice cercato. Mostra i pezzi totali, i siti e le taglie con stock, il prezzo minimo e l'andamento sulle ultime 8 rilevazioni. Ci sono anche il grafico dei pezzi per taglia, lo stato dei siti (trovati / errori) e le ricerche recenti. Con *Aggiorna* ripeti la ricerca di un codice con un clic.
+2. **Ricerca**: scrivi i codici nella barra (Invio, virgola o spazio per aggiungerli; puoi incollare un elenco) oppure cliccali dal catalogo, filtrabile per marca e per testo. Di default cerca su tutti i siti attivi; puoi limitarla ad alcuni.
+3. **Catalogo codici**: l'elenco dei modelli che segui (marca, modello, colorway, codice), modificabile, con importazione rapida (`Marca;Modello;Colorway;Codice`, anche incollando da Excel) ed export CSV. Dal catalogo puoi selezionare più codici e cercarli subito.
+4. **Siti**: i rivenditori, da aggiungere uno alla volta o con importazione rapida (`URL` oppure `Nome;URL`, uno per riga), con export CSV.
+
+Il catalogo parte con un elenco iniziale di modelli molto diffusi (Nike, Jordan, adidas, New Balance, Converse, Vans). È **indicativo**: le voci precaricate hanno il badge "da verificare" finché non le salvi; controlla i codici sul sito del brand.
+
+Nella pagina risultati, per ogni codice c'è una matrice sito × taglia con i pezzi disponibili, il totale per riga e per taglia, il log per sito (trovato / nessun risultato / errore) e l'export Excel.
 
 Significato delle celle:
 
@@ -101,8 +108,10 @@ avvia.bat               avvio con doppio clic su Windows
 avvia.command           avvio con doppio clic su macOS / Linux
 crea_collegamento_desktop.py   crea l'icona sul desktop
 app/
-  main.py               route web: ricerca, risultati, anagrafica siti
-  db.py                 SQLite: siti, ricerche, risultati, log
+  main.py               route web: dashboard, ricerca, risultati, catalogo, siti
+  db.py                 SQLite: siti, catalogo codici, ricerche, risultati, log
+  dashboard.py          dati della dashboard (ultima rilevazione, andamento, taglie, stato siti)
+  catalog_seed.json     elenco iniziale del catalogo codici
   search.py             esecuzione parallela per sito
   sku.py                normalizzazione codici, ordinamento taglie, lettura quantità da testo
   report.py             matrice taglie ed export Excel

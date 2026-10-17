@@ -1,10 +1,11 @@
-"""Applicazione web locale (FastAPI): anagrafica siti, ricerca, risultati."""
+"""Applicazione web locale (FastAPI): dashboard, ricerca, risultati, catalogo codici, anagrafica siti."""
 from __future__ import annotations
 
 import csv
 import io
 import os
 from pathlib import Path
+from urllib.parse import urlencode
 
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -15,9 +16,10 @@ from .adapters import detect_platform
 from .db import Database, clean_url
 from .http import ClientFactory, SiteError, make_client
 from .models import PLATFORMS, Site
+from .dashboard import build_dashboard
 from .report import build_matrix, export_xlsx
 from .search import run_search
-from .sku import parse_codes
+from .sku import normalize, parse_codes
 
 APP_DIR = Path(__file__).parent
 DEFAULT_DB = APP_DIR.parent / "data" / "warehouse.db"
@@ -36,38 +38,47 @@ def create_app(db_path: str | Path | None = None, client_factory: ClientFactory 
     app.mount("/static", StaticFiles(directory=APP_DIR / "static"), name="static")
     templates = Jinja2Templates(directory=APP_DIR / "templates")
     templates.env.globals["PLATFORM_LABELS"] = PLATFORM_LABELS
+    templates.env.globals["normalize"] = normalize
 
     def redirect(url: str) -> RedirectResponse:
         return RedirectResponse(url, status_code=303)
 
-    # --- ricerca ----------------------------------------------------------
-
-    @app.get("/", response_class=HTMLResponse)
-    def home(request: Request):
+    def search_page(request: Request, codes: str = "", error: str = "", status_code: int = 200):
+        catalog = db.list_catalog()
         return templates.TemplateResponse(
             request,
             "search.html",
-            {"sites": db.list_sites(only_active=True), "recent": db.recent_searches()},
+            {
+                "sites": db.list_sites(only_active=True),
+                "catalog": catalog,
+                "brands": sorted({c["brand"] for c in catalog}, key=str.lower),
+                "recent": db.recent_searches(6),
+                "codes": codes,
+                "error": error,
+            },
+            status_code=status_code,
         )
+
+    # --- dashboard e ricerca ------------------------------------------------
+
+    @app.get("/", response_class=HTMLResponse)
+    def dashboard(request: Request):
+        return templates.TemplateResponse(request, "dashboard.html", build_dashboard(db))
+
+    @app.get("/search", response_class=HTMLResponse)
+    def search_form(request: Request):
+        return search_page(request, "\n".join(parse_codes("\n".join(request.query_params.getlist("codes")))))
 
     @app.post("/search")
     async def search(request: Request):
         form = await request.form()
-        codes = parse_codes(str(form.get("codes", "")))
+        raw = "\n".join(str(v) for v in form.getlist("codes"))
+        codes = parse_codes(raw)
         chosen = {int(i) for i in form.getlist("site_ids")}
         sites = [s for s in db.list_sites(only_active=True) if not chosen or s.id in chosen]
         if not codes or not sites:
-            return templates.TemplateResponse(
-                request,
-                "search.html",
-                {
-                    "sites": db.list_sites(only_active=True),
-                    "recent": db.recent_searches(),
-                    "error": "Inserisci almeno un codice prodotto." if not codes else "Nessun sito attivo selezionato.",
-                    "codes": form.get("codes", ""),
-                },
-                status_code=400,
-            )
+            error = "Inserisci o seleziona almeno un codice prodotto." if not codes else "Nessun sito attivo selezionato."
+            return search_page(request, raw, error, status_code=400)
         outcomes = await run_search(sites, codes, client_factory)
         for site in sites:
             errors = [o.error for o in outcomes if o.site is site and o.error]
@@ -82,7 +93,13 @@ def create_app(db_path: str | Path | None = None, client_factory: ClientFactory 
         return templates.TemplateResponse(
             request,
             "results.html",
-            {"search": search_row, "log": log, "blocks": build_matrix(rows), "codes": search_row["codes"].split("\n")},
+            {
+                "search": search_row,
+                "log": log,
+                "blocks": build_matrix(rows),
+                "codes": search_row["codes"].split("\n"),
+                "catalog": db.catalog_by_code(),
+            },
         )
 
     @app.get("/results/{search_id}/export.xlsx")
@@ -100,6 +117,56 @@ def create_app(db_path: str | Path | None = None, client_factory: ClientFactory 
     def results_delete(search_id: int):
         db.delete_search(search_id)
         return redirect("/")
+
+    # --- catalogo codici ---------------------------------------------------
+
+    @app.get("/catalog", response_class=HTMLResponse)
+    def catalog(request: Request, msg: str = ""):
+        items = db.list_catalog()
+        return templates.TemplateResponse(
+            request,
+            "catalog.html",
+            {"items": items, "brands": sorted({c["brand"] for c in items}, key=str.lower), "msg": msg},
+        )
+
+    @app.post("/catalog")
+    def catalog_add(brand: str = Form(""), model: str = Form(""), colorway: str = Form(""), code: str = Form("")):
+        return redirect("/catalog?" + urlencode({"msg": db.save_catalog_item(brand, model, colorway, code)}))
+
+    @app.post("/catalog/import")
+    def catalog_import(text: str = Form("")):
+        items = []
+        for line in filter(str.strip, text.splitlines()):
+            parts = [p.strip() for p in line.replace("\t", ";").split(";")]
+            if len(parts) >= 4:
+                items.append({"brand": parts[0], "model": parts[1], "colorway": parts[2], "code": parts[3]})
+            else:
+                # Righe con meno di 3 campi arrivano incomplete e vengono contate come scartate.
+                items.append({"brand": parts[0], "model": parts[1] if len(parts) > 1 else "", "code": parts[-1] if len(parts) == 3 else ""})
+        added, skipped = db.import_catalog(items)
+        return redirect("/catalog?" + urlencode({"msg": f"Importati {added} codici ({skipped} già presenti o incompleti)"}))
+
+    @app.get("/catalog/export.csv")
+    def catalog_export():
+        out = io.StringIO()
+        writer = csv.writer(out, delimiter=";")
+        writer.writerow(["marca", "modello", "colorway", "codice"])
+        for c in db.list_catalog():
+            writer.writerow([c["brand"], c["model"], c["colorway"], c["code"]])
+        return Response(
+            out.getvalue().encode("utf-8-sig"),
+            media_type="text/csv",
+            headers={"Content-Disposition": 'attachment; filename="catalogo.csv"'},
+        )
+
+    @app.post("/catalog/{item_id}")
+    def catalog_update(item_id: int, brand: str = Form(""), model: str = Form(""), colorway: str = Form(""), code: str = Form("")):
+        return redirect("/catalog?" + urlencode({"msg": db.save_catalog_item(brand, model, colorway, code, item_id)}))
+
+    @app.post("/catalog/{item_id}/delete")
+    def catalog_delete(item_id: int):
+        db.delete_catalog_item(item_id)
+        return redirect("/catalog?msg=Codice+eliminato")
 
     # --- anagrafica siti --------------------------------------------------
 

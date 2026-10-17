@@ -1,7 +1,13 @@
 {% extends "base.html" %}
+{% block title %}{{ 'Modifica sito' if site.id else 'Nuovo sito' }}{% endblock %}
 {% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ 'Modifica ' + site.name if site.id else 'Nuovo sito' }}</h1>
+    <p>Basta l'indirizzo del negozio: la piattaforma viene riconosciuta da sola.</p>
+  </div>
+</div>
 <section class="card narrow">
-  <h1>{{ 'Modifica ' + site.name if site.id else 'Nuovo sito' }}</h1>
   <form method="post" action="{{ '/sites/' ~ site.id if site.id else '/sites' }}" class="stack">
     <label>URL del sito
       <input name="base_url" value="{{ site.base_url }}" placeholder="https://www.negozio.it" required>
@@ -55,7 +61,7 @@
 
     <div class="actions">
       <button type="submit">Salva</button>
-      <a href="/sites">Annulla</a>
+      <a class="btn ghost" href="/sites">Annulla</a>
     </div>
   </form>
 </section>

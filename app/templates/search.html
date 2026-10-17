@@ -1,50 +1,155 @@
 {% extends "base.html" %}
+{% block title %}Ricerca{% endblock %}
 {% block content %}
-<section class="card">
-  <h1>Cerca disponibilità</h1>
-  <p class="muted">Inserisci uno o più style code (uno per riga), es. <code>DD1391-100</code>, <code>IE3438</code>, <code>U9060AAA</code>.</p>
-  {% if error %}<p class="alert">{{ error }}</p>{% endif %}
-  {% if not sites %}
-    <p class="alert">Nessun sito attivo. <a href="/sites">Aggiungi i siti dei rivenditori</a> prima di cercare.</p>
-  {% else %}
-  <form method="post" action="/search" id="search-form">
-    <textarea name="codes" rows="4" placeholder="DD1391-100&#10;FZ5808-100" required>{{ codes or '' }}</textarea>
-    <details>
-      <summary>Siti in cui cercare ({{ sites|length }} attivi — di default tutti)</summary>
-      <div class="checks">
+<div class="page-head">
+  <div>
+    <h1>Cerca disponibilità</h1>
+    <p>Scrivi i codici (style code) o sceglili dal catalogo, poi avvia la ricerca sui siti.</p>
+  </div>
+</div>
+{% if error %}<p class="alert">{{ error }}</p>{% endif %}
+{% if not sites %}
+  <p class="alert">Nessun sito attivo: <a href="/sites">aggiungi i siti dei rivenditori</a> prima di cercare.</p>
+{% endif %}
+
+<form method="post" action="/search" id="search-form" data-searching>
+<input type="hidden" name="codes" id="codes" value="{{ codes }}">
+<div class="grid search">
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <h2>Codici da cercare</h2>
+        <span class="small">Invio, virgola o spazio per aggiungere · puoi incollare un elenco</span>
+      </div>
+      <button type="button" class="ghost sm" id="clear-codes">Svuota</button>
+    </div>
+    <div class="tokens" id="tokens">
+      <input id="code-input" placeholder="es. DD1391-100" autocomplete="off" autofocus aria-label="Codice prodotto">
+    </div>
+
+    {% if catalog %}
+    <div class="picker-bar">
+      <input type="search" id="cat-filter" placeholder="Filtra: modello, colore, codice…" aria-label="Filtra catalogo">
+      <div class="pills" id="brand-pills">
+        <button type="button" class="pill on" data-brand="">Tutti</button>
+        {% for b in brands %}<button type="button" class="pill" data-brand="{{ b }}">{{ b }}</button>{% endfor %}
+      </div>
+    </div>
+    <div class="chips" id="chips">
+      {% for c in catalog %}
+      <button type="button" class="chip" data-code="{{ c.code }}" data-norm="{{ c.code_norm }}" data-brand="{{ c.brand }}"
+              data-text="{{ (c.brand ~ ' ' ~ c.model ~ ' ' ~ c.colorway ~ ' ' ~ c.code)|lower }}">
+        <b>{{ c.code }}</b>
+        <span>{{ c.brand }} {{ c.model }}</span>
+        {% if c.colorway %}<span class="small">{{ c.colorway }}</span>{% endif %}
+      </button>
+      {% endfor %}
+    </div>
+    <p class="small" style="margin:10px 0 0">Il catalogo si modifica dalla pagina <a href="/catalog">Catalogo codici</a>.</p>
+    {% endif %}
+  </div>
+
+  <div>
+    <div class="card">
+      <h2>Dove cercare</h2>
+      <span class="small">Nessuna selezione = tutti i {{ sites|length }} siti attivi</span>
+      <div class="site-list">
         {% for s in sites %}
-        <label><input type="checkbox" name="site_ids" value="{{ s.id }}"> {{ s.name }} <span class="tag">{{ s.platform }}</span></label>
+        <label><input type="checkbox" name="site_ids" value="{{ s.id }}"> {{ s.name }} <span class="badge">{{ s.platform }}</span></label>
         {% endfor %}
       </div>
-    </details>
-    <button type="submit">Cerca</button>
-    <span class="spinner" hidden>Ricerca in corso… può richiedere qualche secondo per sito.</span>
-  </form>
-  <script>
-    document.getElementById('search-form').addEventListener('submit', function () {
-      this.querySelector('button').disabled = true;
-      this.querySelector('.spinner').hidden = false;
-    });
-  </script>
-  {% endif %}
-</section>
+      <button type="submit" class="lg" style="width:100%" {{ 'disabled' if not sites }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        Cerca <span id="count-label"></span></button>
+      <div class="searching" id="searching" hidden><div class="spinner"></div>Ricerca in corso: qualche secondo per sito…</div>
+    </div>
 
-{% if recent %}
-<section class="card">
-  <h2>Ricerche recenti</h2>
-  <table>
-    <thead><tr><th>Data</th><th>Codici</th><th class="num">Pezzi trovati [pz]</th><th></th></tr></thead>
-    <tbody>
-    {% for r in recent %}
-      <tr>
-        <td>{{ r.created_at.replace('T', ' ') }}</td>
-        <td>{{ r.codes.replace('\n', ', ') }}</td>
-        <td class="num">{{ r.pieces }}</td>
-        <td><a href="/results/{{ r.id }}">Apri</a></td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-</section>
-{% endif %}
+    {% if recent %}
+    <div class="card">
+      <h2>Ricerche recenti</h2>
+      <ul class="recent">
+        {% for r in recent %}
+        <li><span class="codes">{{ r.codes.replace('\n', ' · ') }}</span><a href="/results/{{ r.id }}">Apri</a></li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+  </div>
+</div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const hidden = document.getElementById('codes');
+  const box = document.getElementById('tokens');
+  const input = document.getElementById('code-input');
+  const chips = Array.from(document.querySelectorAll('.chip'));
+  const countLabel = document.getElementById('count-label');
+  const norm = c => c.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  let codes = [];
+
+  function add(raw) {
+    raw.split(/[\s,;]+/).map(c => c.trim().toUpperCase()).filter(Boolean).forEach(function (c) {
+      if (!codes.some(x => norm(x) === norm(c))) codes.push(c);
+    });
+    render();
+  }
+  function remove(code) { codes = codes.filter(x => norm(x) !== norm(code)); render(); }
+  function render() {
+    box.querySelectorAll('.token').forEach(t => t.remove());
+    codes.forEach(function (c) {
+      const t = document.createElement('span');
+      t.className = 'token';
+      t.textContent = c;
+      const x = document.createElement('button');
+      x.type = 'button'; x.textContent = '×'; x.setAttribute('aria-label', 'Rimuovi ' + c);
+      x.onclick = () => remove(c);
+      t.appendChild(x);
+      box.insertBefore(t, input);
+    });
+    const selected = new Set(codes.map(norm));
+    chips.forEach(ch => ch.classList.toggle('on', selected.has(ch.dataset.norm)));
+    hidden.value = codes.join('\n');
+    countLabel.textContent = codes.length ? '(' + codes.length + ' codic' + (codes.length === 1 ? 'e' : 'i') + ')' : '';
+  }
+
+  input.addEventListener('keydown', function (e) {
+    if (['Enter', ',', ' ', ';'].includes(e.key)) {
+      if (input.value.trim()) { e.preventDefault(); add(input.value); input.value = ''; }
+      else if (e.key === 'Enter' && !codes.length) e.preventDefault();
+    } else if (e.key === 'Backspace' && !input.value && codes.length) {
+      remove(codes[codes.length - 1]);
+    }
+  });
+  input.addEventListener('paste', function (e) {
+    e.preventDefault(); add((e.clipboardData || window.clipboardData).getData('text'));
+  });
+  box.addEventListener('click', e => { if (e.target === box) input.focus(); });
+  document.getElementById('clear-codes').onclick = () => { codes = []; render(); input.focus(); };
+  chips.forEach(ch => ch.addEventListener('click', function () {
+    codes.some(x => norm(x) === ch.dataset.norm) ? remove(ch.dataset.code) : add(ch.dataset.code);
+  }));
+  document.getElementById('search-form').addEventListener('submit', function () {
+    if (input.value.trim()) { add(input.value); input.value = ''; }
+  }, true);
+
+  // Filtro catalogo: testo + marca.
+  const filter = document.getElementById('cat-filter');
+  let brand = '';
+  function applyFilter() {
+    const q = (filter ? filter.value : '').toLowerCase().trim();
+    chips.forEach(ch => { ch.hidden = (brand && ch.dataset.brand !== brand) || (q && !ch.dataset.text.includes(q)); });
+  }
+  if (filter) filter.addEventListener('input', applyFilter);
+  document.querySelectorAll('#brand-pills .pill').forEach(p => p.addEventListener('click', function () {
+    document.querySelectorAll('#brand-pills .pill').forEach(x => x.classList.remove('on'));
+    p.classList.add('on'); brand = p.dataset.brand; applyFilter();
+  }));
+
+  if (hidden.value) add(hidden.value);
+  render();
+})();
+</script>
 {% endblock %}

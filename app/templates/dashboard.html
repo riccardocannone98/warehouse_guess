@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Dashboard</h1>
+    <p>Situazione dell'ultima rilevazione per ogni codice cercato.</p>
+  </div>
+  <a class="btn" href="/search">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    Nuova ricerca</a>
+</div>
+
+<div class="grid kpis">
+  <div class="card kpi">
+    <div class="label">Pezzi rilevati</div>
+    <div class="value">{{ kpi.pieces }}<span class="unit">pz</span></div>
+    <div class="sub">somma delle ultime rilevazioni</div>
+  </div>
+  <div class="card kpi">
+    <div class="label">Codici con disponibilità</div>
+    <div class="value">{{ kpi.codes_in_stock }}<span class="unit">/ {{ kpi.codes_tracked }}</span></div>
+    <div class="sub">codici cercati almeno una volta</div>
+  </div>
+  <div class="card kpi">
+    <div class="label">Siti attivi</div>
+    <div class="value">{{ kpi.sites_active }}<span class="unit">/ {{ kpi.sites_total }}</span></div>
+    <div class="sub"><a href="/sites">gestisci siti</a></div>
+  </div>
+  <div class="card kpi">
+    <div class="label">Ricerche effettuate</div>
+    <div class="value">{{ kpi.searches }}</div>
+    <div class="sub">{{ kpi.catalog }} codici in <a href="/catalog">catalogo</a></div>
+  </div>
+</div>
+
+{% if not codes %}
+<div class="card empty" style="margin-top:18px">
+  <h2>Ancora nessuna rilevazione</h2>
+  <p>Aggiungi i siti dei rivenditori, poi cerca uno o più codici: qui vedrai pezzi disponibili, taglie, prezzi e l'andamento nel tempo.</p>
+  <div class="steps">
+    <a class="btn ghost" href="/sites">1 · Aggiungi i siti</a>
+    <a class="btn" href="/search">2 · Cerca i codici</a>
+  </div>
+</div>
+{% else %}
+<div class="card" style="margin-top:18px">
+  <div class="card-head">
+    <div>
+      <h2>Disponibilità per codice</h2>
+      <span class="small">Ultima rilevazione di ogni codice · andamento sulle ultime 8 rilevazioni</span>
+    </div>
+  </div>
+  <div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Codice / modello</th>
+        <th>Pezzi [pz]</th>
+        <th class="num">Siti con stock</th>
+        <th class="num">Taglie disponibili</th>
+        <th class="num">Prezzo min.</th>
+        <th>Andamento [pz]</th>
+        <th>Rilevato il</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for c in codes %}
+      <tr>
+        <td class="code-cell"><b>{{ c.code }}</b>{% if c.label %}<span class="sub">{{ c.label }}{% if c.colorway %} · {{ c.colorway }}{% endif %}</span>{% endif %}</td>
+        <td>
+          <div class="hbar" data-tip="{{ c.code }}: {{ c.pieces }} pz in {{ c.sites_in_stock }} siti">
+            <div class="track"><div class="fill" style="width: {{ c.bar }}%"></div></div>
+            <span class="val">{{ c.pieces }}</span>
+          </div>
+        </td>
+        <td class="num">{{ c.sites_in_stock }}</td>
+        <td class="num">{{ c.sizes_in_stock }}</td>
+        <td class="num">{% if c.best_price is not none %}{{ '%.2f'|format(c.best_price) }} {{ c.currency }}{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td>
+          {% if c.spark %}
+          <div class="spark" data-tip="{% for d in c.trend_dates %}{{ d }}: {{ c.trend[loop.index0] }} pz{% if not loop.last %}&#10;{% endif %}{% endfor %}">
+            <svg viewBox="0 0 96 26" aria-label="Andamento pezzi"><polyline points="{{ c.spark.points }}"/><circle cx="{{ c.spark.last[0] }}" cy="{{ c.spark.last[1] }}" r="3.5"/></svg>
+            <span class="delta">{{ '%+d'|format(c.delta) }}</span>
+          </div>
+          {% else %}<span class="small">1 rilevazione</span>{% endif %}
+        </td>
+        <td class="small">{{ c.checked_at[:16].replace('T', ' ') }}</td>
+        <td class="actions">
+          <a class="btn ghost sm" href="/results/{{ c.search_id }}">Dettaglio</a>
+          <form method="post" action="/search" data-searching>
+            <input type="hidden" name="codes" value="{{ c.code }}">
+            <button class="sm" type="submit" data-tip="Ripete la ricerca su tutti i siti attivi">Aggiorna</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="searching" id="searching" hidden><div class="spinner"></div>Ricerca in corso sui siti…</div>
+</div>
+
+<div class="grid two">
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <h2>Pezzi per taglia</h2>
+        <span class="small">Somma su tutti i codici, ultima rilevazione · passa sulle barre per i valori</span>
+      </div>
+    </div>
+    {% if sizes %}
+      {% set peak = sizes|map(attribute='pieces')|max %}
+      <div class="columns" role="img" aria-label="Pezzi disponibili per taglia">
+        {% for s in sizes %}
+        <div class="col" data-tip="Taglia {{ s.size }}: {{ s.pieces }} pz">
+          {% if s.pieces == peak %}<span class="top" style="bottom: {{ s.bar }}%">{{ s.pieces }}</span>{% endif %}
+          <div class="b" style="height: {{ s.bar }}%"></div>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="col-labels">{% for s in sizes %}<span>{{ s.size }}</span>{% endfor %}</div>
+      <details style="margin-top:14px">
+        <summary class="small">Vedi come tabella</summary>
+        <table><thead><tr><th>Taglia</th><th class="num">Pezzi [pz]</th></tr></thead>
+        <tbody>{% for s in sizes %}<tr><td>{{ s.size }}</td><td class="num">{{ s.pieces }}</td></tr>{% endfor %}</tbody></table>
+      </details>
+    {% else %}
+      <p class="muted">Nessuna quantità numerica rilevata finora: i siti cercati espongono solo disponibile/esaurito.</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <h2>Stato dei siti</h2>
+        <span class="small">Esiti di tutte le ricerche</span>
+      </div>
+      <a class="btn ghost sm" href="/sites">Gestisci</a>
+    </div>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Sito</th><th class="num">Trovati</th><th class="num">Errori</th><th>Ultimo stato</th></tr></thead>
+      <tbody>
+      {% for r in sites %}
+        <tr class="{{ '' if r.site.active else 'inactive' }}">
+          <td><b>{{ r.site.name }}</b><br><span class="small">{{ PLATFORM_LABELS[r.site.platform] }}</span></td>
+          <td class="num">{{ r.ok }}<span class="small"> / {{ r.total }}</span></td>
+          <td class="num">{{ r.errors }}{% if r.error_rate %}<span class="small"> ({{ r.error_rate }}%)</span>{% endif %}</td>
+          <td>
+            {% if not r.site.last_status %}<span class="badge vuoto">○ mai interrogato</span>
+            {% elif r.site.last_status == 'ok' %}<span class="badge ok">● ok</span>
+            {% else %}<span class="badge errore" data-tip="{{ r.site.last_status }}">▲ errore</span>{% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="4" class="muted">Nessun sito. <a href="/sites">Aggiungine uno</a>.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if recent %}
+<div class="card" style="margin-top:18px">
+  <div class="card-head"><h2>Ricerche recenti</h2></div>
+  <ul class="recent">
+    {% for r in recent %}
+    <li>
+      <span class="codes">{{ r.codes.replace('\n', ' · ') }}</span>
+      <span class="actions"><span class="small">{{ r.created_at[:16].replace('T', ' ') }} · {{ r.pieces }} pz</span><a href="/results/{{ r.id }}">Apri</a></span>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+{% endblock %}

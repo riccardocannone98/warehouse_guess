@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}Catalogo codici{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Catalogo codici</h1>
+    <p>I modelli che segui, pronti da selezionare nella ricerca. {{ items|length }} codici.</p>
+  </div>
+  <div class="actions">
+    <a class="btn ghost" href="/catalog/export.csv">Esporta CSV</a>
+    <a class="btn" href="#add">+ Aggiungi codice</a>
+  </div>
+</div>
+{% if msg %}<p class="notice">{{ msg }}</p>{% endif %}
+{% if items|selectattr('seeded')|list %}
+<p class="badge warn" style="margin-bottom:16px">⚠ I codici "da verificare" sono un elenco iniziale indicativo: controllali sul sito del brand. Il badge sparisce quando salvi la voce.</p>
+{% endif %}
+
+<div class="card">
+  <div class="picker-bar" style="margin-top:0">
+    <input type="search" id="cat-filter" placeholder="Filtra: modello, colore, codice…" aria-label="Filtra catalogo">
+    <div class="pills" id="brand-pills">
+      <button type="button" class="pill on" data-brand="">Tutti</button>
+      {% for b in brands %}<button type="button" class="pill" data-brand="{{ b }}">{{ b }}</button>{% endfor %}
+    </div>
+  </div>
+  <form method="post" action="/search" id="sel-form" data-searching></form>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th><input type="checkbox" id="check-all" aria-label="Seleziona tutti i visibili"></th><th>Marca</th><th>Modello</th><th>Colorway</th><th>Codice</th><th></th></tr></thead>
+    <tbody>
+    {% for c in items %}
+      <tr data-brand="{{ c.brand }}" data-text="{{ (c.brand ~ ' ' ~ c.model ~ ' ' ~ c.colorway ~ ' ' ~ c.code)|lower }}">
+        <td><input type="checkbox" form="sel-form" name="codes" value="{{ c.code }}" aria-label="Seleziona {{ c.code }}"></td>
+        <td>{{ c.brand }}</td>
+        <td><b>{{ c.model }}</b></td>
+        <td>{{ c.colorway }}</td>
+        <td><code>{{ c.code }}</code>{% if c.seeded %} <span class="badge warn">da verificare</span>{% endif %}</td>
+        <td class="actions">
+          <button type="button" class="link" data-edit='{{ {"id": c.id, "brand": c.brand, "model": c.model, "colorway": c.colorway, "code": c.code}|tojson|forceescape }}'>Modifica</button>
+          <form method="post" action="/catalog/{{ c.id }}/delete" onsubmit="return confirm('Eliminare {{ c.code }} dal catalogo?')"><button class="link danger" type="submit">Elimina</button></form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="muted">Catalogo vuoto: aggiungi i codici qui sotto.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="selbar" id="selbar" hidden>
+    <span><b id="sel-count">0</b> codici selezionati</span>
+    <button type="submit" form="sel-form">Cerca ora su tutti i siti attivi</button>
+  </div>
+  <div class="searching" id="searching" hidden><div class="spinner"></div>Ricerca in corso…</div>
+</div>
+
+<div class="grid two">
+  <div class="card" id="add">
+    <h2>Aggiungi codice</h2>
+    <span class="small">Lo style code è sull'etichetta interna della scarpa, sulla scatola o nella scheda prodotto del brand.</span>
+    <form method="post" action="/catalog" class="form-grid" style="margin-top:14px">
+      <label>Marca<input name="brand" required placeholder="Nike"></label>
+      <label>Modello<input name="model" required placeholder="Dunk Low Retro"></label>
+      <label>Colorway<input name="colorway" placeholder="White/Black"></label>
+      <label>Codice<input name="code" required placeholder="DD1391-100" class="mono"></label>
+      <div><button type="submit">Aggiungi</button></div>
+    </form>
+  </div>
+  <div class="card">
+    <h2>Importazione rapida</h2>
+    <span class="small">Una riga per codice: <code>Marca;Modello;Colorway;Codice</code> (colorway facoltativo). Va bene anche incollare da Excel.</span>
+    <form method="post" action="/catalog/import" style="margin-top:12px">
+      <textarea name="text" rows="5" placeholder="Nike;Dunk Low Retro;White/Black;DD1391-100&#10;adidas;Samba OG;B75806"></textarea>
+      <button type="submit" style="margin-top:10px">Importa</button>
+    </form>
+  </div>
+</div>
+
+<dialog id="edit-dialog">
+  <form method="post" class="stack" id="edit-form">
+    <h2 style="margin-top:0">Modifica codice</h2>
+    <label>Marca<input name="brand" required></label>
+    <label>Modello<input name="model" required></label>
+    <label>Colorway<input name="colorway"></label>
+    <label>Codice<input name="code" required class="mono"></label>
+    <div class="actions"><button type="submit">Salva</button><button type="button" class="ghost" onclick="this.closest('dialog').close()">Annulla</button></div>
+  </form>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const rows = Array.from(document.querySelectorAll('tbody tr[data-brand]'));
+  const filter = document.getElementById('cat-filter');
+  let brand = '';
+  function applyFilter() {
+    const q = filter.value.toLowerCase().trim();
+    rows.forEach(r => { r.hidden = (brand && r.dataset.brand !== brand) || (q && !r.dataset.text.includes(q)); });
+  }
+  filter.addEventListener('input', applyFilter);
+  document.querySelectorAll('#brand-pills .pill').forEach(p => p.addEventListener('click', function () {
+    document.querySelectorAll('#brand-pills .pill').forEach(x => x.classList.remove('on'));
+    p.classList.add('on'); brand = p.dataset.brand; applyFilter();
+  }));
+
+  const boxes = () => rows.map(r => r.querySelector('input[type=checkbox]'));
+  function updateSel() {
+    const n = boxes().filter(b => b.checked).length;
+    document.getElementById('sel-count').textContent = n;
+    document.getElementById('selbar').hidden = n === 0;
+  }
+  document.addEventListener('change', e => { if (e.target.matches('input[name=codes]')) updateSel(); });
+  document.getElementById('check-all').addEventListener('change', function () {
+    rows.forEach(r => { if (!r.hidden) r.querySelector('input[type=checkbox]').checked = this.checked; });
+    updateSel();
+  });
+
+  const dialog = document.getElementById('edit-dialog');
+  const form = document.getElementById('edit-form');
+  document.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', function () {
+    const d = JSON.parse(b.dataset.edit);
+    form.action = '/catalog/' + d.id;
+    ['brand', 'model', 'colorway', 'code'].forEach(k => { form.elements[k].value = d[k] || ''; });
+    dialog.showModal();
+  }));
+})();
+</script>
+{% endblock %}

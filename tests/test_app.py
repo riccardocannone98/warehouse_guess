@@ -1,3 +1,4 @@
+import re
 from io import BytesIO
 
 import pytest
@@ -70,8 +71,10 @@ def test_full_search_flow(client):
     assert samba == {"41.5": 1, "43": 7, "45": 0}
     assert any(r[2] == "errore" for r in wb["Log ricerca"].iter_rows(values_only=True))
 
-    home = client.get("/").text
-    assert "DD1391-100, B75806, U9060AAA" in home
+    dash = client.get("/").text
+    assert "DD1391-100 · B75806 · U9060AAA" in dash  # ricerche recenti
+    assert "Dunk Low Retro" in dash  # nome modello dal catalogo
+    assert "Taglia 43: 7 pz" in dash  # grafico pezzi per taglia
 
 
 def test_search_without_sites_or_codes(client):
@@ -84,3 +87,52 @@ def test_search_only_selected_sites(client):
     client.post("/sites/import", data={"text": f"Shop;{SHOP}\nWoo;{WOO}"})
     r = client.post("/search", data={"codes": "DD1391-100", "site_ids": ["1"]})
     assert "Shop" in r.text and "Woo</td>" not in r.text
+
+
+def test_dashboard_empty_state(client):
+    page = client.get("/").text
+    assert "Ancora nessuna rilevazione" in page
+
+
+def test_dashboard_trend_after_two_searches(client):
+    client.post("/sites", data={"base_url": WOO, "platform": "woocommerce", "active": "on"})
+    client.post("/search", data={"codes": "B75806"})
+    client.post("/search", data={"codes": "b75806"})  # stesso codice scritto diversamente
+    page = client.get("/").text
+    assert page.count("<polyline") == 1 and "+0" in page
+
+
+def test_catalog_seeded_and_crud(client):
+
+    page = client.get("/catalog").text
+    assert "DD1391-100" in page and "da verificare" in page
+
+    r = client.post("/catalog", data={"brand": "Asics", "model": "Gel-Kayano 14", "colorway": "", "code": "1201a019 107"})
+    assert "Aggiunto 1201A019 107" in r.text
+    r = client.post("/catalog", data={"brand": "Nike", "model": "Dunk", "colorway": "", "code": "dd1391100"})
+    assert "già in catalogo" in r.text
+
+    r = client.post("/catalog/import", data={"text": "Nike;Air Max 90;White;CN8490-100\nadidas;Samba OG;B75806\nincompleta"})
+    assert "Importati 1 codici (2 già presenti o incompleti)" in r.text
+
+    item_id = re.search(r"/catalog/(\d+)/delete\" onsubmit=\"return confirm\('Eliminare 1201A019 107", r.text).group(1)
+    r = client.post(f"/catalog/{item_id}", data={"brand": "ASICS", "model": "Gel-Kayano 14", "colorway": "Cream", "code": "1201A019-107"})
+    assert "Aggiornato 1201A019-107" in r.text and "Cream" in r.text
+    client.post(f"/catalog/{item_id}/delete")
+    assert "1201A019-107" not in client.get("/catalog").text
+
+    csv_text = client.get("/catalog/export.csv").content.decode("utf-8-sig")
+    assert csv_text.startswith("marca;modello;colorway;codice") and "CN8490-100" in csv_text
+
+
+def test_search_page_shows_catalog_and_prefills(client):
+    page = client.get("/search", params=[("codes", "dd1391-100"), ("codes", "B75806")]).text
+    assert 'data-code="CW2288-111"' in page
+    assert 'value="DD1391-100\nB75806"' in page
+
+
+def test_search_with_codes_selected_from_catalog(client):
+    client.post("/sites", data={"base_url": SHOP, "platform": "shopify", "active": "on"})
+    r = client.post("/search", data={"codes": ["DD1391-100", "CW2288-111"]})
+    assert "/results/" in str(r.url)
+    assert "Nike Dunk Low Retro White Black" in r.text and "CW2288-111" in r.text
