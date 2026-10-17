@@ -14,7 +14,24 @@ Il confronto ignora maiuscole, spazi e trattini: `dd1391 100`, `DD1391-100` e lo
 
 ## Avvio
 
-Richiede Python 3.10 o successivo.
+Richiede Python 3.10 o successivo ([python.org/downloads](https://www.python.org/downloads/); su Windows spunta **"Add python.exe to PATH"** durante l'installazione).
+
+### Collegamento sul desktop (consigliato)
+
+1. Fai doppio clic su `crea_collegamento_desktop.py` (oppure da terminale: `python crea_collegamento_desktop.py`). Va fatto una sola volta; se sposti la cartella del progetto, ripetilo.
+2. Sul desktop compare l'icona **Warehouse Guess**: con un doppio clic l'app parte e si apre il browser.
+
+Al primo avvio vengono preparati l'ambiente Python (`.venv`) e le librerie, quindi serve internet e qualche minuto. Dal secondo avvio parte in pochi secondi. L'app resta attiva finché è aperta la sua finestra (su Windows è ridotta a icona nella barra delle applicazioni): chiudila per fermarla. Se fai doppio clic con l'app già aperta, si riapre solo il browser.
+
+| Sistema | Il collegamento avvia | Nota |
+|---|---|---|
+| Windows | `avvia.bat` | collegamento `.lnk` con icona |
+| macOS | `avvia.command` | la prima volta macOS può bloccarlo: tasto destro sull'icona → **Apri** → **Apri** |
+| Linux | `avvia.command` | file `.desktop`; se richiesto, tasto destro → "Consenti avvio" |
+
+Puoi anche avviare direttamente `avvia.bat` (Windows) o `avvia.command` (macOS/Linux) dalla cartella del progetto.
+
+### Da terminale
 
 ```bash
 python -m venv .venv
@@ -73,6 +90,9 @@ Gli elementi con classe `disabled` o con attributo `disabled` sono considerati e
 
 ```
 run.py                  avvio locale (uvicorn + apertura browser)
+avvia.bat               avvio con doppio clic su Windows
+avvia.command           avvio con doppio clic su macOS / Linux
+crea_collegamento_desktop.py   crea l'icona sul desktop
 app/
   main.py               route web: ricerca, risultati, anagrafica siti
   db.py                 SQLite: siti, ricerche, risultati, log
