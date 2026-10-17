@@ -32,6 +32,10 @@ PLATFORM_LABELS = {
 }
 
 
+def asset_version() -> str:
+    return str(max(int(f.stat().st_mtime) for f in (APP_DIR / "static").iterdir()))
+
+
 def create_app(db_path: str | Path | None = None, client_factory: ClientFactory = make_client) -> FastAPI:
     db = Database(db_path or os.environ.get("WAREHOUSE_DB", DEFAULT_DB))
     app = FastAPI(title="Warehouse Guess")
@@ -39,6 +43,9 @@ def create_app(db_path: str | Path | None = None, client_factory: ClientFactory 
     templates = Jinja2Templates(directory=APP_DIR / "templates")
     templates.env.globals["PLATFORM_LABELS"] = PLATFORM_LABELS
     templates.env.globals["normalize"] = normalize
+    # Versione dei file statici nei link: a ogni aggiornamento il browser scarica il CSS nuovo
+    # invece di usare quello vecchio in cache.
+    templates.env.globals["asset_version"] = asset_version()
 
     def redirect(url: str) -> RedirectResponse:
         return RedirectResponse(url, status_code=303)

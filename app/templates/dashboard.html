@@ -81,7 +81,7 @@
         <td>
           {% if c.spark %}
           <div class="spark" data-tip="{% for d in c.trend_dates %}{{ d }}: {{ c.trend[loop.index0] }} pz{% if not loop.last %}&#10;{% endif %}{% endfor %}">
-            <svg viewBox="0 0 96 26" aria-label="Andamento pezzi"><polyline points="{{ c.spark.points }}"/><circle cx="{{ c.spark.last[0] }}" cy="{{ c.spark.last[1] }}" r="3.5"/></svg>
+            <svg width="96" height="26" viewBox="0 0 96 26" aria-label="Andamento pezzi"><polyline points="{{ c.spark.points }}"/><circle cx="{{ c.spark.last[0] }}" cy="{{ c.spark.last[1] }}" r="3.5"/></svg>
             <span class="delta">{{ '%+d'|format(c.delta) }}</span>
           </div>
           {% else %}<span class="small">1 rilevazione</span>{% endif %}
